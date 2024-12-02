@@ -1,13 +1,14 @@
 package io.kaizensolutions.tusk.codec
 
+import fs2.Chunk
+import io.circe.Json
 import io.vertx.core.buffer.Buffer
 import io.vertx.sqlclient.Tuple as VertxTuple
-import java.util.UUID
-import java.time.*
-import fs2.Chunk
-import scala.annotation.implicitNotFound
-import io.circe.Json
 import shapeless3.deriving.K0
+
+import java.time.*
+import java.util.UUID
+import scala.annotation.implicitNotFound
 
 @FunctionalInterface
 @implicitNotFound("No Encoder found for ${A}, please provide one")
@@ -56,25 +57,25 @@ object Encoder:
     def valuesPlaceholder: String
 
   object Batch:
-    given productEncoder[A](using deriver: K0.ProductInstances[Encoder, A]): Encoder.Batch[A] = 
-        new Batch[A]:
-          import scala.collection.mutable as mutable
-          def valuesPlaceholder: String =
-            var count = 1
-            val (out, _) = 
-              deriver.unfold(mutable.StringBuilder().append("(")): 
-                [piece] => 
-                  (sb: mutable.StringBuilder, _: Encoder[piece]) =>
-                    val acc = sb.append("$").append(count)
-                    count += 1
-                    (acc, Option.empty[piece])
-            out.append(")").toString()
+    def valuesPlaceholder[A](using batch: Encoder.Batch[A]): String = batch.valuesPlaceholder
 
-          def encode(value: A, acc: VertxTuple): VertxTuple =
-            deriver.foldLeft[VertxTuple](value)(acc):
+    given productEncoder[A](using deriver: K0.ProductInstances[Encoder, A]): Encoder.Batch[A] =
+      new Batch[A]:
+        import scala.collection.mutable as mutable
+        def valuesPlaceholder: String =
+          var count = 1
+          val (out, _) =
+            deriver.unfold(mutable.StringBuilder().append("(")):
               [piece] =>
-                (acc: VertxTuple, pieceEncoder: Encoder[piece], p: piece) =>
-                  pieceEncoder.encode(p, acc)
+                (sb: mutable.StringBuilder, _: Encoder[piece]) =>
+                  val acc = sb.append("$").append(count)
+                  count += 1
+                  (acc, Option.empty[piece])
+          out.append(")").toString()
 
-    inline def derived[A](using deriver: K0.ProductGeneric[A]): Encoder.Batch[A] = 
-    productEncoder[A]
+        def encode(value: A, acc: VertxTuple): VertxTuple =
+          deriver.foldLeft[VertxTuple](value)(acc):
+            [piece] => (acc: VertxTuple, pieceEncoder: Encoder[piece], p: piece) => pieceEncoder.encode(p, acc)
+
+    inline def derived[A](using deriver: K0.ProductGeneric[A]): Encoder.Batch[A] =
+      productEncoder[A]

@@ -1,5 +1,14 @@
 val scala3Version = "3.3.4"
 
+inThisBuild(
+  List(
+    scalaVersion      := scala3Version,
+    semanticdbEnabled := true,
+    semanticdbVersion := scalafixSemanticdb.revision,
+    scalacOptions ++= Seq("-Wunused:imports")
+  )
+)
+
 lazy val root = project
   .in(file("."))
   .settings(

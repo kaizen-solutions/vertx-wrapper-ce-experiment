@@ -1,23 +1,22 @@
 package com.user.land
 
-import cats.syntax.all.*
 import cats.effect.*
+import cats.syntax.all.*
 import fs2.*
-import io.vertx.pgclient.*
-import io.vertx.sqlclient.{Pool as VertxPool, *}
-import cats.effect.Resource.ExitCase
-import io.kaizensolutions.tusk.*
-import io.kaizensolutions.tusk.codec.Decoder
-import io.kaizensolutions.tusk.interpolation.ValueInSql
-import io.kaizensolutions.tusk.codec.Encoder
 import io.circe.Json
 import io.circe.syntax.*
+import io.kaizensolutions.tusk.*
+import io.kaizensolutions.tusk.codec.{Decoder, Encoder}
+import io.kaizensolutions.tusk.interpolation.ValueInSql
+import io.vertx.pgclient.PgConnectOptions as VertxPgConnectOptions
+import io.vertx.sqlclient.PoolOptions as VertxPoolOptions
+
 import scala.concurrent.duration.*
 
 object Main extends IOApp.Simple:
   val run =
     val connectOptions =
-      PgConnectOptions()
+      VertxPgConnectOptions()
         .setPort(5432)
         .setHost("localhost")
         .setDatabase("postgres")
@@ -26,13 +25,18 @@ object Main extends IOApp.Simple:
         .setCachePreparedStatements(true)
 
     val poolOptions =
-      PoolOptions().setMaxSize(5)
+      VertxPoolOptions().setMaxSize(5)
+
+    def createExampleTable(pool: Pool[IO]): IO[Unit] =
+      pool.query("CREATE TABLE IF NOT EXISTS public.example(val_json JSON)").void
 
     def batchExample(pool: Pool[IO]): IO[Unit] =
       pool
-        .updateMany(
-          s"""INSERT INTO public.example(val_json) 
-             VALUES ${summon[Encoder.Batch[ExampleRow]].valuesPlaceholder}
+        .executeBatch(
+          s"""
+          INSERT INTO public.example(val_json)
+          VALUES ${Encoder.Batch.valuesPlaceholder[ExampleRow]}
+          RETURNING *
           """,
           Chunk(
             ExampleRow(Json.obj("foo" := "bar")),
@@ -50,31 +54,32 @@ object Main extends IOApp.Simple:
           .void
 
     def cancelExample(pool: Pool[IO]): IO[Unit] =
-      val dbSleep = pool.advanced.connection.use(_.query("select pg_sleep(10)").void >> IO.println("Sleep for 10s finished"))
+      val dbSleep =
+        pool.advanced.connection.use(_.query("select pg_sleep(10)").void >> IO.println("Sleep for 10s finished"))
       val runtimeSleep = IO.sleep(2.seconds) >> IO.println("Sleep for 2s finished")
       dbSleep.race(runtimeSleep).void
 
-    def preparedStatementBadUsageExample(pool: Pool[IO]): IO[Unit] =
+    def preparedStatementUsageExample(pool: Pool[IO]): IO[Chunk[String]] =
       pool.advanced.connection.use: cxn =>
-        val prepare = cxn.prepare("SELECT * FROM pg_catalog.pg_attribute WHERE attrelid = $1 AND attlen = $2")
+        val prepare =
+          cxn.prepare("SELECT * FROM pg_catalog.pg_attribute WHERE attname like $1 AND attlen = $2")
         for
-          ps   <- prepare
-          _    <- ps.close
-          rows <- ps.query(Chunk(ValueInSql("1255"), ValueInSql(4)))
+          ps <- prepare
+          // _    <- ps.close
+          rows <- ps.query(Chunk(ValueInSql("pro%"), ValueInSql(4)))
         yield rows.map(_.deepToString())
 
     def streamExample(pool: Pool[IO]): IO[Unit] =
-      val attrelid = "1255"
-      val attlen   = 4
-
-      val query = sql"SELECT * FROM pg_catalog.pg_attribute WHERE attrelid = $attrelid" ++ sql" AND attlen = $attlen"
-      println(query.render)
+      val attlen = 4
+      val query =
+        sql"SELECT * FROM pg_catalog.pg_attribute WHERE attlen = $attlen"
 
       pool
         .queryStream(query, 32)
         .chunks
         .map(_.map(_.deepToString()))
         .unchunks
+        .debug()
         .compile
         .drain
 
@@ -83,7 +88,7 @@ object Main extends IOApp.Simple:
         _.`with`(poolOptions)
           .connectingTo(connectOptions)
       .use: pool =>
-        cancelExample(pool)
+        preparedStatementUsageExample(pool).debug().void
 
 final case class PgAttributeRow(
   attrelid: String,

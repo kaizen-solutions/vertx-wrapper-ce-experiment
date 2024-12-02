@@ -1,14 +1,15 @@
 package io.kaizensolutions.tusk.codec
 
-import io.vertx.sqlclient.Row
-import java.util.UUID
-import java.time.*
 import fs2.Chunk
-import shapeless3.deriving.K0
-import shapeless3.deriving.Labelling
-import io.circe.Json
-import io.circe.parser
+import io.circe.{parser, Json}
+import io.vertx.sqlclient.Row
+import shapeless3.deriving.{K0, Labelling}
 
+import java.time.*
+import java.util.UUID
+import scala.annotation.implicitNotFound
+
+@implicitNotFound("No Decoder found for ${A}, please provide one")
 trait Decoder[A]:
   self =>
 
@@ -109,22 +110,22 @@ object Decoder:
       def indexed(row: Row, ignoredIndex: Int): A =
         var currentIndex = 0
         deriver.construct:
-          [piece] =>
-            (pieceDecoder: Decoder[piece]) =>
-              val piece = pieceDecoder.indexed(row, currentIndex)
-              currentIndex += 1
-              piece
+          [piece] => { (pieceDecoder: Decoder[piece]) =>
+            val piece = pieceDecoder.indexed(row, currentIndex)
+            currentIndex += 1
+            piece
+          }
 
       def named(row: Row, ignoredName: String): A =
         if labelling.elemLabels.isEmpty then indexed(row, -1)
         else
           var currentIndex = 0
           deriver.construct:
-            [piece] =>
-              (pieceDecoder: Decoder[piece]) =>
-                val piece = pieceDecoder.named(row, labelling.elemLabels(currentIndex))
-                currentIndex += 1
-                piece
+            [piece] => { (pieceDecoder: Decoder[piece]) =>
+              val piece = pieceDecoder.named(row, labelling.elemLabels(currentIndex))
+              currentIndex += 1
+              piece
+            }
 
   // derivation limited to product types via ProductGeneric
   inline def derived[A](using deriver: K0.ProductGeneric[A]): Decoder[A] =

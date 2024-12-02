@@ -16,30 +16,29 @@ object SqlInterpolatedString:
   import SqlInterpolated.*
   extension (value: SqlInterpolatedString)
     private[tusk] def escapeHatch: Chunk[SqlInterpolated] = value
-   
+
     def ++(that: String): SqlInterpolatedString = value.escapeHatch ++ Chunk.singleton(Plain(that))
 
     def ++(that: SqlInterpolatedString): SqlInterpolatedString = value.escapeHatch ++ that.escapeHatch
 
     def render: (String, Chunk[ValueInSql]) =
-        var currentIndex = 1
-        val placeholder = "$"
-        val stringBuilder = new scala.collection.mutable.StringBuilder()
-        val valueBuilder = Array.newBuilder[ValueInSql]
-        value.foreach:
-            case Plain(value) => 
-                stringBuilder.append(value)
-            
-            case Value(sqlValue) => 
-                stringBuilder.append(placeholder).append(currentIndex)
-                valueBuilder += sqlValue
-                currentIndex += 1
+      var currentIndex  = 1
+      val placeholder   = "$"
+      val stringBuilder = new scala.collection.mutable.StringBuilder()
+      val valueBuilder  = Array.newBuilder[ValueInSql]
+      value.foreach:
+        case Plain(value) =>
+          stringBuilder.append(value)
 
-            case Pair(value, sqlValue) =>
-                stringBuilder.append(value)
-                stringBuilder.append(placeholder).append(currentIndex)
-                valueBuilder += sqlValue
-                currentIndex += 1
+        case Value(sqlValue) =>
+          stringBuilder.append(placeholder).append(currentIndex)
+          valueBuilder += sqlValue
+          currentIndex += 1
 
-        stringBuilder.toString() -> Chunk.array(valueBuilder.result())
+        case Pair(value, sqlValue) =>
+          stringBuilder.append(value)
+          stringBuilder.append(placeholder).append(currentIndex)
+          valueBuilder += sqlValue
+          currentIndex += 1
 
+      stringBuilder.toString() -> Chunk.array(valueBuilder.result())
