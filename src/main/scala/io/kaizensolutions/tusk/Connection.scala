@@ -9,7 +9,7 @@ import fs2.*
 import io.kaizensolutions.tusk.interpolation.SqlInterpolatedString
 
 final class Connection[F[_]](cxn: LowLevelConnection[F])(using A: Async[F]):
-  def queryRows(sql: String): F[Chunk[Row]] = cxn.queryRows(sql)
+  def query(sql: String): F[Chunk[Row]] = cxn.query(sql)
 
   private[tusk] def escapeHatch: LowLevelConnection[F] = cxn
 
@@ -17,13 +17,13 @@ object Connection:
   def from[F[_]: Async](cxn: LowLevelConnection[F]): Connection[F] = Connection(cxn)
 
 final class LowLevelConnection[F[_]](cxn: VertxSqlConnection)(using A: Async[F]):
-  def queryRows(sql: String): F[Chunk[Row]] =
+  def query(sql: String): F[Chunk[Row]] =
     fromVertx(cxn.query(sql).execute())
       .map(rowSet => Chunk.iterator(rowSet.iterator().asScala))
 
-  def prepare(query: String): F[PreparedStatement[F]] =
+  def prepare(sql: String): F[PreparedStatement[F]] =
     fromVertx:
-      cxn.prepare(query).map(PreparedStatement(_))
+      cxn.prepare(sql).map(PreparedStatement(_))
 
   val close: F[Unit] = fromVertx(cxn.close()).void
 

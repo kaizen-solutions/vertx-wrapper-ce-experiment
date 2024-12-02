@@ -9,7 +9,6 @@ import io.vertx.sqlclient.*
 import cats.effect.Resource.ExitCase
 
 final class PreparedStatement[F[_]](ps: VertxPreparedStatement)(using A: Async[F]):
-  println(s"PS HASHCODE ${ps.hashCode()}")
   def close: F[Unit] = fromVertx(ps.close()).void
 
   def query(values: Chunk[ValueInSql]): F[Chunk[Row]] =

@@ -2,15 +2,16 @@ package io.kaizensolutions.tusk
 
 import cats.effect.*
 import cats.effect.Resource.ExitCase
+import cats.effect.syntax.all.*
 import cats.syntax.all.*
 import io.vertx.sqlclient.{ClientBuilder, Pool as VertxPool, Row, Tuple as VertxTuple}
 import io.vertx.pgclient.PgBuilder
 import scala.jdk.CollectionConverters.*
 import fs2.*
-import scala.annotation.targetName
 import io.kaizensolutions.tusk.codec.*
 import io.kaizensolutions.tusk.interpolation.SqlInterpolatedString
-import io.vertx.sqlclient.impl.cache.LruCache
+import io.vertx.pgclient.PgConnection
+import cats.effect.kernel.Resource.ExitCase.*
 
 final class Pool[F[_]](
   underlying: VertxPool
@@ -35,7 +36,7 @@ final class Pool[F[_]](
         val fetch = Stream.force(cxn.prepare(sqlString).map(_.stream(values, fetchSize)))
         val txn = Stream.bracketCase(cxn.transaction.beginOrReuse)((txn, exitCase) =>
           exitCase match
-            case ExitCase.Succeeded => txn.commit
+            case ExitCase.Succeeded                      => txn.commit
             case ExitCase.Errored(_) | ExitCase.Canceled => txn.rollback
         )
         txn >> fetch
@@ -55,9 +56,19 @@ final class Pool[F[_]](
 
   object advanced:
     def connection: Resource[F, LowLevelConnection[F]] =
-      val create: F[LowLevelConnection[F]]           = fromVertx(underlying.getConnection()).map(LowLevelConnection.from)
-      val teardown: LowLevelConnection[F] => F[Unit] = _.close
-      Resource.make(create)(teardown)
+      val create: F[LowLevelConnection[F]] = fromVertx(underlying.getConnection()).map(LowLevelConnection.from)
+
+      def teardown(cxn: LowLevelConnection[F], exit: ExitCase): F[Unit] = exit match
+        case Succeeded  => cxn.close
+        case Errored(e) => cxn.close
+        case Canceled   => cancel(cxn).guarantee(cxn.close)
+
+      Resource.makeCase(create)(teardown)
+
+    // Postgres feature only
+    private def cancel(cxn: LowLevelConnection[F]): F[Unit] =
+      val postgresConnection = PgConnection.cast(cxn.escapeHatch)
+      fromVertx(postgresConnection.cancelRequest()).void
 
 object Pool:
   def make[F[_]](configure: ClientBuilder[VertxPool] => ClientBuilder[VertxPool])(using

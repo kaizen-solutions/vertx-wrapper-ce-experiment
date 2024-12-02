@@ -1,6 +1,7 @@
 services:
   database:
     image: postgres:17-alpine
+    command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr"]
     restart: always
     ports:
       - 5432:5432
