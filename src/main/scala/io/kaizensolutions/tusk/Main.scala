@@ -12,6 +12,7 @@ import io.vertx.pgclient.PgConnectOptions as VertxPgConnectOptions
 import io.vertx.sqlclient.PoolOptions as VertxPoolOptions
 
 import scala.concurrent.duration.*
+import io.kaizensolutions.tusk.codec.renamed
 
 object Main extends IOApp.Simple:
   val run =
@@ -59,7 +60,7 @@ object Main extends IOApp.Simple:
       val runtimeSleep = IO.sleep(2.seconds) >> IO.println("Sleep for 2s finished")
       dbSleep.race(runtimeSleep).void
 
-    def preparedStatementUsageExample(pool: Pool[IO]): IO[Chunk[String]] =
+    def preparedStatementUsageExample(pool: Pool[IO]): IO[Chunk[PgAttributeRow]] =
       pool.advanced.connection.use: cxn =>
         val prepare =
           cxn.prepare("SELECT * FROM pg_catalog.pg_attribute WHERE attname like $1 AND attlen = $2")
@@ -67,7 +68,7 @@ object Main extends IOApp.Simple:
           ps <- prepare
           // _    <- ps.close
           rows <- ps.query(Chunk(ValueInSql("pro%"), ValueInSql(4)))
-        yield rows.map(_.deepToString())
+        yield rows.labelledDecode[PgAttributeRow]
 
     def streamExample(pool: Pool[IO]): IO[Unit] =
       val attlen = 4
@@ -76,9 +77,7 @@ object Main extends IOApp.Simple:
 
       pool
         .queryStream(query, 32)
-        .chunks
-        .map(_.map(_.deepToString()))
-        .unchunks
+        .labelledDecode[PgAttributeRow]
         .debug()
         .compile
         .drain
@@ -88,12 +87,14 @@ object Main extends IOApp.Simple:
         _.`with`(poolOptions)
           .connectingTo(connectOptions)
       .use: pool =>
-        preparedStatementUsageExample(pool).debug().void
+        streamExample(pool)
+
+final case class huehue() extends scala.annotation.Annotation
 
 final case class PgAttributeRow(
-  attrelid: String,
+  @renamed("attrelid") attRelId: String,
   attname: String,
-  attbyval: Boolean
+  @renamed("attbyval") attByVal: Boolean
 ) derives Decoder,
       Encoder.Batch
 

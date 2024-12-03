@@ -3,11 +3,11 @@ package io.kaizensolutions.tusk.codec
 import fs2.Chunk
 import io.circe.{parser, Json}
 import io.vertx.sqlclient.Row
-import shapeless3.deriving.{K0, Labelling}
 
 import java.time.*
 import java.util.UUID
-import scala.annotation.implicitNotFound
+import scala.annotation.{implicitNotFound, Annotation as ScalaAnnotation}
+import shapeless3.deriving.{AllAnnotations, K0, Labelling}
 
 @implicitNotFound("No Decoder found for ${A}, please provide one")
 trait Decoder[A]:
@@ -114,9 +114,20 @@ object Decoder:
 
   given decoderProduct[A](using
     deriver: K0.ProductInstances[Decoder, A],
-    labelling: Labelling[A]
+    labelling: Labelling[A],
+    as: AllAnnotations[A]
   ): Decoder[A] =
     new Decoder[A]:
+      // The outer array represents the elements of the case class
+      // The inner array represents the annotations of the element (0 to many annotations per element)
+      val annotations: IArray[IArray[ScalaAnnotation]] =
+        as().toIArray
+          .collect:
+            case t: Tuple =>
+              t.toIArray
+                .collect:
+                  case a: ScalaAnnotation => a
+
       def indexed(row: Row, ignoredIndex: Int): A =
         var currentIndex = 0
         deriver.construct:
@@ -132,7 +143,14 @@ object Decoder:
           var currentIndex = 0
           deriver.construct:
             [piece] => { (pieceDecoder: Decoder[piece]) =>
-              val piece = pieceDecoder.named(row, labelling.elemLabels(currentIndex))
+              val defaultName = labelling.elemLabels(currentIndex)
+              val name =
+                annotations(currentIndex)
+                  .collectFirst:
+                    case renamed(newName) => newName
+                  .getOrElse(defaultName)
+
+              val piece = pieceDecoder.named(row, name)
               currentIndex += 1
               piece
             }
