@@ -24,6 +24,11 @@ trait Decoder[A]:
       def named(row: Row, name: String): B = f(self.named(row, name))
 
 object Decoder:
+  def manual[A](f: Row => A): Decoder[A] = new Decoder[A]:
+    def indexed(row: Row, index: Int): A = f(row)
+
+    def named(row: Row, name: String): A = f(row)
+
   given Decoder[Boolean] = new Decoder[Boolean]:
     def indexed(row: Row, index: Int): Boolean = row.getBoolean(index)
 

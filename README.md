@@ -1,9 +1,12 @@
-## sbt project compiled with Scala 3
+# Vertx PG Client Cats Effect Testbed
 
-### Usage
+This is a testbed for how to integrate the Vertx Postgres SQL Client with Cats Effect with a focus on providing algebraic primitives
+and a semi-high level API.
 
-This is a normal sbt project. You can compile code with `sbt compile`, run it with `sbt run`, and `sbt console` will start a Scala 3 REPL.
-
-For more information on the sbt-dotty plugin, see the
-[scala3-example-project](https://github.com/scala/scala3-example-project/blob/main/README.md).
-# vertx-wrapper-ce-experiment
+## Goals
+* SQL Interpolation like Doobie
+* Encoders and Decoders for common types with automatic derivation
+* High-level API for common use cases
+* Low-level APIs for complex use cases
+* Streaming
+* Batching
