@@ -9,6 +9,7 @@ import shapeless3.deriving.K0
 import java.time.*
 import java.util.UUID
 import scala.annotation.implicitNotFound
+import io.vertx.core.json.{JsonArray as VertxJsonArray, JsonObject as VertxJsonObject}
 
 @FunctionalInterface
 @implicitNotFound("No Encoder found for ${A}, please provide one")
@@ -46,7 +47,17 @@ object Encoder:
 
   given Encoder[Chunk[Byte]] = (value, into) => into.addBuffer(Buffer.buffer(value.toArray))
 
-  given Encoder[Json] = (value, into) => into.addString(value.noSpaces)
+  // Note: If you choose to encode Json.String, you need to escape all double quotes and surround the string with quotes
+  // This is due to the underlying driver's limitation
+  given Encoder[Json] = (value, into) =>
+    value.fold(
+      jsonNull = into.addValue(null),
+      jsonBoolean = into.addBoolean(_),
+      jsonNumber = num => into.addDouble(num.toDouble),
+      jsonString = into.addString(_),
+      jsonArray = arr => into.addJsonArray(VertxJsonArray(value.noSpaces)),
+      jsonObject = obj => into.addJsonObject(VertxJsonObject(value.noSpaces))
+    )
 
   given Encoder[BigDecimal] = (value, into) => into.addBigDecimal(value.bigDecimal)
 

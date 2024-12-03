@@ -31,7 +31,7 @@ object Main extends IOApp.Simple:
     def createExampleTable(pool: Pool[IO]): IO[Unit] =
       pool.query("CREATE TABLE IF NOT EXISTS public.example(val_json JSON)").void
 
-    def batchExample(pool: Pool[IO]): IO[Unit] =
+    def batchExample(pool: Pool[IO]): IO[Chunk[ExampleRow]] =
       pool
         .executeBatch(
           s"""
@@ -39,20 +39,38 @@ object Main extends IOApp.Simple:
           VALUES ${Encoder.Batch.valuesPlaceholder[ExampleRow]}
           RETURNING *
           """,
-          Chunk(
-            ExampleRow(Json.obj("foo" := "bar")),
-            ExampleRow(Json.obj("foo" := "baz")),
-            ExampleRow(Json.obj("foo" := "qux"))
-          )
+          Chunk
+            .from:
+              0 to 1
+            .flatMap: i =>
+              Chunk(
+                ExampleRow(Json.fromBoolean(true)),
+                ExampleRow(Json.fromInt(42)),
+                ExampleRow(Json.fromString("\"Hello,\\\" world!\"")),
+                ExampleRow(
+                  Json.fromValues(List(Json.fromBoolean(true), Json.fromInt(42), Json.fromString("Hello, world!")))
+                ),
+                ExampleRow(Json.obj(s"foo$i" := s"bar$i")),
+                ExampleRow(Json.obj(s"foo$i" := s"baz$i")),
+                ExampleRow(
+                  Json.obj(
+                    s"foo$i" := Json.obj(
+                      s"qux$i" := Json.arr(
+                        Json.obj(s"quux$i" := "corge$i"),
+                        Json.fromBoolean(true),
+                        Json.fromDoubleOrNull(1.23)
+                      )
+                    )
+                  )
+                )
+              )
         )
-        .map(_.map(_.deepToString()))
-        .debug() *>
-        pool
-          .query("SELECT val_json from public.example")
-          .indexedDecode[Json]
-          .map(_.map(_.noSpaces))
-          .debug()
-          .void
+        .indexedDecode[ExampleRow]
+
+    def jsonExample(pool: Pool[IO]): Stream[IO, Json] =
+      pool
+        .queryStream(sql"SELECT val_json from public.example")
+        .indexedDecode[Json]
 
     def cancelExample(pool: Pool[IO]): IO[Unit] =
       val dbSleep =
@@ -78,7 +96,7 @@ object Main extends IOApp.Simple:
       pool
         .queryStream(query, 32)
         .labelledDecode[PgAttributeRow]
-        .debug()
+        .debugChunks()
         .compile
         .drain
 
@@ -87,9 +105,19 @@ object Main extends IOApp.Simple:
         _.`with`(poolOptions)
           .connectingTo(connectOptions)
       .use: pool =>
-        streamExample(pool)
+        val create = createExampleTable(pool)
 
-final case class huehue() extends scala.annotation.Annotation
+        val populate = Chunk
+          .from:
+            0 to 10
+          .parTraverse_(_ => batchExample(pool))
+
+        val read = jsonExample(pool)
+          .debugChunks(_.map(_.noSpaces).toString)
+          .compile
+          .drain
+
+        create *> populate *> read
 
 final case class PgAttributeRow(
   @renamed("attrelid") attRelId: String,
