@@ -105,7 +105,17 @@ object Decoder:
         case Left(exception) => throw exception
         case Right(value)    => value
 
-  given decoderProduct[A](using deriver: K0.ProductInstances[Decoder, A], labelling: Labelling[A]): Decoder[A] =
+  given Decoder[BigDecimal] = new Decoder[BigDecimal]:
+    def indexed(row: Row, index: Int): BigDecimal =
+      row.getBigDecimal(index)
+
+    def named(row: Row, name: String): BigDecimal =
+      row.getBigDecimal(name)
+
+  given decoderProduct[A](using
+    deriver: K0.ProductInstances[Decoder, A],
+    labelling: Labelling[A]
+  ): Decoder[A] =
     new Decoder[A]:
       def indexed(row: Row, ignoredIndex: Int): A =
         var currentIndex = 0

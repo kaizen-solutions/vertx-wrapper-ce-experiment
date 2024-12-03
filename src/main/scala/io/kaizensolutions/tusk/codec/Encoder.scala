@@ -48,6 +48,8 @@ object Encoder:
 
   given Encoder[Json] = (value, into) => into.addString(value.noSpaces)
 
+  given Encoder[BigDecimal] = (value, into) => into.addBigDecimal(value.bigDecimal)
+
   // More here: https://vertx.io/docs/vertx-pg-client/java/#_postgresql_type_mapping
 
   // Supports batched inserts and updates
