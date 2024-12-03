@@ -78,7 +78,7 @@ object Main extends IOApp.Simple:
       pool
         .queryStream(query, 32)
         .labelledDecode[PgAttributeRow]
-        .debug()
+        // .debug()
         .compile
         .drain
 
@@ -87,7 +87,13 @@ object Main extends IOApp.Simple:
         _.`with`(poolOptions)
           .connectingTo(connectOptions)
       .use: pool =>
-        streamExample(pool)
+        Stream
+          .range(1, 10_000)
+          .mapAsyncUnordered(128)(_ => streamExample(pool))
+          .compile
+          .drain
+      .timed
+      .flatMap((t, _) => IO.println(s"Duration: ${t.toMillis} ms"))
 
 final case class huehue() extends scala.annotation.Annotation
 
