@@ -10,6 +10,7 @@ import io.kaizensolutions.tusk.codec.*
 import io.kaizensolutions.tusk.interpolation.SqlInterpolatedString
 import io.vertx.pgclient.{PgBuilder, PgConnection}
 import io.vertx.sqlclient.{ClientBuilder, Pool as VertxPool, Row, Tuple as VertxTuple}
+import io.vertx.sqlclient.impl.ArrayTuple.EMPTY as AbsentVertxTuple
 
 import scala.jdk.CollectionConverters.*
 
@@ -27,13 +28,34 @@ final class Pool[F[_]](
     fromVertx(underlying.query(sql).execute())
       .map(Chunk.fromRowSet)
 
-  def query(query: SqlInterpolatedString): F[Chunk[Row]] =
-    val (sqlString, values) = query.render
-    fromVertx(underlying.preparedQuery(sqlString).execute(values.toVertx))
+  def query(input: SqlInterpolatedString): F[Chunk[Row]] =
+    val (sqlString, values) = input.render
+    query(sqlString, values.toVertx)
+
+  def query(sqlString: String, value: SqlValues): F[Chunk[Row]] =
+    query(sqlString, value.toVertx)
+
+  def query[A](sqlString: String, value: A)(using encoder: Encoder[A]): F[Chunk[Row]] =
+    query(sqlString, encoder.encode(value, VertxTuple.tuple()))
+
+  private inline def query(sqlString: String, value: VertxTuple): F[Chunk[Row]] =
+    fromVertx(underlying.preparedQuery(sqlString).execute(value))
       .map(Chunk.fromRowSet)
+
+  def queryStream(sqlString: String, fetchSize: Int): Stream[F, Row] =
+    queryStream(sqlString, AbsentVertxTuple, fetchSize)
 
   def queryStream(query: SqlInterpolatedString, fetchSize: Int = 512): Stream[F, Row] =
     val (sqlString, values) = query.render
+    queryStream(sqlString, values.toVertx, fetchSize)
+
+  def queryStream(sqlString: String, value: SqlValues, fetchSize: Int): Stream[F, Row] =
+    queryStream(sqlString, value.toVertx, fetchSize)
+
+  def queryStream[A](sqlString: String, value: A, fetchSize: Int)(using encoder: Encoder[A]): Stream[F, Row] =
+    queryStream(sqlString, encoder.encode(value, VertxTuple.tuple()), fetchSize)
+
+  private inline def queryStream(sqlString: String, value: VertxTuple, fetchSize: Int): Stream[F, Row] =
     Stream
       .resource(advanced.connection)
       .flatMap: cxn =>
@@ -42,7 +64,7 @@ final class Pool[F[_]](
             case ExitCase.Succeeded                      => txn.commit
             case ExitCase.Errored(_) | ExitCase.Canceled => txn.rollback
         )
-        val fetch = Stream.force(cxn.prepare(sqlString).map(_.stream(values, fetchSize)))
+        val fetch = Stream.force(cxn.prepare(sqlString).map(_.stream(value, fetchSize)))
 
         txn >> fetch
 

@@ -54,7 +54,7 @@ final class PreparedStatement[F[_]](ps: VertxPreparedStatement)(using A: Async[F
     val tuple = values.toVertx
     stream(tuple, fetchSize)
 
-  private inline def stream(tuple: VertxTuple, fetchSize: Int): Stream[F, VertxRow] =
+  private[tusk] inline def stream(tuple: VertxTuple, fetchSize: Int): Stream[F, VertxRow] =
     val open: Pull[F, VertxRow, VertxCursor] =
       Pull.eval:
         A.delay:
