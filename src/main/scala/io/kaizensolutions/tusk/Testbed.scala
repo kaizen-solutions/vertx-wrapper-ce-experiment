@@ -14,7 +14,7 @@ import io.vertx.sqlclient.PoolOptions as VertxPoolOptions
 import scala.concurrent.duration.*
 import io.kaizensolutions.tusk.codec.renamed
 
-object Main extends IOApp.Simple:
+object Testbed extends IOApp.Simple:
   val run =
     val connectOptions =
       VertxPgConnectOptions()
@@ -36,7 +36,7 @@ object Main extends IOApp.Simple:
         .executeBatch(
           s"""
           INSERT INTO public.example(val_json)
-          VALUES ${Encoder.Batch.valuesPlaceholder[ExampleRow]}
+          VALUES (${Encoder.Batch.valuesPlaceholder[ExampleRow]})
           RETURNING *
           """,
           Chunk
@@ -72,6 +72,15 @@ object Main extends IOApp.Simple:
         .queryStream(sql"SELECT val_json from public.example")
         .indexedDecode[Json]
 
+    def insertExample(pool: Pool[IO]): IO[Chunk[ExampleRow]] =
+      val data = ExampleRow(Json.obj("foobar" := "baz"))
+      pool.advanced.connection
+        .use: cxn =>
+          cxn
+            .prepare("INSERT INTO public.example(val_json) VALUES ($1) RETURNING *")
+            .flatMap(_.query(data))
+        .labelledDecode[ExampleRow]
+
     def cancelExample(pool: Pool[IO]): IO[Unit] =
       val dbSleep =
         pool.advanced.connection.use(_.query("select pg_sleep(10)").void >> IO.println("Sleep for 10s finished"))
@@ -85,7 +94,7 @@ object Main extends IOApp.Simple:
         for
           ps <- prepare
           // _    <- ps.close
-          rows <- ps.query(SqlValues(Chunk(ValueInSql("pro%"), ValueInSql(4))))
+          rows <- ps.query(SqlValues(ValueInSql("pro%"), ValueInSql(4)))
         yield rows.labelledDecode[PgAttributeRow]
 
     def streamExample(pool: Pool[IO]): IO[Unit] =
@@ -120,7 +129,9 @@ object Main extends IOApp.Simple:
         val queryStream = streamExample(pool)
         val psExample   = preparedStatementUsageExample(pool).void
 
-        create *> populate *> read *> queryStream *> psExample
+        val insert = insertExample(pool).debug().void
+
+        create *> populate *> read *> queryStream *> psExample *> insert
 
 final case class PgAttributeRow(
   @renamed("attrelid") attRelId: String,

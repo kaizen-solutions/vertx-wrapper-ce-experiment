@@ -11,6 +11,7 @@ import io.kaizensolutions.tusk.interpolation.ValueInSql
 opaque type SqlValues = Chunk[ValueInSql]
 object SqlValues:
   def apply(in: Chunk[ValueInSql]): SqlValues = in
+  def apply(in: ValueInSql*): SqlValues       = Chunk.from(in)
 
   extension (value: SqlValues)
     inline def isEmpty: Boolean = value.isEmpty
