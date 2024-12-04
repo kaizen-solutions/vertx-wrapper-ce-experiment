@@ -22,7 +22,7 @@ final class LowLevelConnection[F[_]](cxn: VertxSqlConnection)(using A: Async[F])
 
   def query(sqlString: String): F[Chunk[Row]] =
     fromVertx(cxn.query(sqlString).execute())
-      .map(rowSet => Chunk.iterator(rowSet.iterator().asScala))
+      .map(Chunk.fromRowSet)
 
   def prepare(sqlString: String): F[PreparedStatement[F]] =
     fromVertx:

@@ -23,7 +23,7 @@ final class PreparedStatement[F[_]](ps: VertxPreparedStatement)(using A: Async[F
 
     executeBatch(batchValues)
 
-  def executeBatch(values: Chunk[Chunk[ValueInSql]]): F[Chunk[VertxRow]] =
+  def executeBatch(values: Chunk[SqlValues]): F[Chunk[VertxRow]] =
     val batchValues =
       values.map(_.toVertx).toList.asJava
 
@@ -33,7 +33,12 @@ final class PreparedStatement[F[_]](ps: VertxPreparedStatement)(using A: Async[F
     fromVertx(ps.query().executeBatch(input))
       .map(Chunk.fromRowSet)
 
-  def query(values: Chunk[ValueInSql]): F[Chunk[VertxRow]] =
+  def query[A](value: A)(using encoder: Encoder[A]): F[Chunk[VertxRow]] =
+    val tuple = encoder.encode(value, VertxTuple.tuple())
+    fromVertx(ps.query().execute(tuple))
+      .map(Chunk.fromRowSet)
+
+  def query(values: SqlValues): F[Chunk[VertxRow]] =
     val fetchRowSet =
       fromVertx:
         if values.isEmpty then ps.query().execute()
@@ -41,12 +46,19 @@ final class PreparedStatement[F[_]](ps: VertxPreparedStatement)(using A: Async[F
 
     fetchRowSet.map(Chunk.fromRowSet)
 
-  def stream(values: Chunk[ValueInSql], fetchSize: Int): Stream[F, VertxRow] =
+  def stream[A](value: A)(using encoder: Encoder[A], fetchSize: Int): Stream[F, VertxRow] =
+    val tuple = encoder.encode(value, VertxTuple.tuple())
+    stream(tuple, fetchSize)
+
+  def stream(values: SqlValues, fetchSize: Int): Stream[F, VertxRow] =
+    val tuple = values.toVertx
+    stream(tuple, fetchSize)
+
+  private inline def stream(tuple: VertxTuple, fetchSize: Int): Stream[F, VertxRow] =
     val open: Pull[F, VertxRow, VertxCursor] =
       Pull.eval:
         A.delay:
-          if values.isEmpty then ps.cursor()
-          else ps.cursor(values.toVertx)
+          ps.cursor(tuple)
 
     def tearDown(c: VertxCursor, exitCase: ExitCase): Pull[F, VertxRow, Unit] = Pull.eval(fromVertx(c.close()).void)
 

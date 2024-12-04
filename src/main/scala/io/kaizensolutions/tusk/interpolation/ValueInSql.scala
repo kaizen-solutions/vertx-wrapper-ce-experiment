@@ -2,6 +2,16 @@ package io.kaizensolutions.tusk.interpolation
 
 import io.kaizensolutions.tusk.codec.Encoder
 
+/**
+ * A value that was present in a SQL interpolated string like `sql"select * from
+ * table where a = $a AND b = $b"` where `a` and `b` are Scala values with
+ * potentially different types.
+ *
+ * The SQL interpolated string above gets rendered into a plain SQL query string
+ * like `select * from table where a = $1, b = $2` and a chunk of `ValueInSql`
+ * objects like `Chunk(ValueInSql("hello", encoderForString), ValueInSql(42,
+ * encoderForInt))`.
+ */
 trait ValueInSql:
   type Value
   val value: Value

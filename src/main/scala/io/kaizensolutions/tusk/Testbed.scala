@@ -41,7 +41,7 @@ object Main extends IOApp.Simple:
           """,
           Chunk
             .from:
-              0 to 1
+              1 to 10
             .flatMap: i =>
               Chunk(
                 ExampleRow(Json.fromBoolean(true)),
@@ -85,7 +85,7 @@ object Main extends IOApp.Simple:
         for
           ps <- prepare
           // _    <- ps.close
-          rows <- ps.query(Chunk(ValueInSql("pro%"), ValueInSql(4)))
+          rows <- ps.query(SqlValues(Chunk(ValueInSql("pro%"), ValueInSql(4))))
         yield rows.labelledDecode[PgAttributeRow]
 
     def streamExample(pool: Pool[IO]): IO[Unit] =
@@ -117,7 +117,10 @@ object Main extends IOApp.Simple:
           .compile
           .drain
 
-        create *> populate *> read
+        val queryStream = streamExample(pool)
+        val psExample   = preparedStatementUsageExample(pool).void
+
+        create *> populate *> read *> queryStream *> psExample
 
 final case class PgAttributeRow(
   @renamed("attrelid") attRelId: String,

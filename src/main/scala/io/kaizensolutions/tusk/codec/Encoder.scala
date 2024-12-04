@@ -47,8 +47,11 @@ object Encoder:
 
   given Encoder[Chunk[Byte]] = (value, into) => into.addBuffer(Buffer.buffer(value.toArray))
 
-  // Note: If you choose to encode Json.String, you need to escape all double quotes and surround the string with quotes
-  // This is due to the underlying driver's limitation
+  /**
+   * Note: If you choose to encode Json.String, you need to escape all double
+   * quotes and surround the string with quotes. This is due to the underlying
+   * Vertx driver's limitation
+   */
   given Encoder[Json] = (value, into) =>
     value.fold(
       jsonNull = into.addValue(null),
@@ -63,7 +66,15 @@ object Encoder:
 
   // More here: https://vertx.io/docs/vertx-pg-client/java/#_postgresql_type_mapping
 
-  // Supports batched inserts and updates
+  /**
+   * This is mostly a marker trait to help identify a case class encoder but it
+   * does have a way to generate value placeholders if you need to insert or
+   * update
+   *   - Supports batched inserts/updates
+   *   - Can also be used to generate the values placeholder for a query
+   *   - You can also use this for normal inserts/updates as long as you ensure
+   *     the case class fields are in the same order as the query
+   */
   trait Batch[A] extends Encoder[A]:
     // For example: case class ExampleRow(a: Int, b: String)
     // The valuesPlaceholder should return: ($1, $2)

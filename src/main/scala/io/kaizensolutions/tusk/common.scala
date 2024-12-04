@@ -4,22 +4,13 @@ import cats.effect.*
 import cats.syntax.functor.*
 import fs2.*
 import io.kaizensolutions.tusk.codec.Decoder
-import io.kaizensolutions.tusk.interpolation.ValueInSql
-import io.vertx.sqlclient.{Row as VertxRow, RowSet as VertxRowSet, Tuple as VertxTuple}
+import io.vertx.sqlclient.{Row as VertxRow, RowSet as VertxRowSet}
 import io.vertx.core.Future as VertxFuture
 
 import scala.jdk.CollectionConverters.*
 
 private[tusk] def fromVertx[F[_], A](thunk: => VertxFuture[A])(using A: Async[F]): F[A] =
   A.fromCompletionStage(A.delay(thunk.toCompletionStage()))
-
-extension (c: Chunk[ValueInSql])
-  inline def toVertx: VertxTuple =
-    var acc = VertxTuple.tuple()
-    c.foreach: vsql =>
-      val updated = vsql.encoder.encode(vsql.value, acc)
-      acc = updated
-    acc
 
 extension (c: Chunk.type)
   inline def fromRowSet(rowSet: VertxRowSet[VertxRow]): Chunk[io.vertx.sqlclient.Row] =

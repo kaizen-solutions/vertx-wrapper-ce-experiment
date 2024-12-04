@@ -1,6 +1,7 @@
 package io.kaizensolutions.tusk.interpolation
 
 import fs2.Chunk
+import io.kaizensolutions.tusk.SqlValues
 
 private[tusk] enum SqlInterpolated:
   case Plain(value: String)
@@ -14,19 +15,19 @@ object SqlInterpolatedString:
   def apply(in: String): SqlInterpolatedString = Chunk.singleton(SqlInterpolated.Plain(in))
 
   import SqlInterpolated.*
-  extension (value: SqlInterpolatedString)
-    private[tusk] def escapeHatch: Chunk[SqlInterpolated] = value
+  extension (input: SqlInterpolatedString)
+    private[tusk] def escapeHatch: Chunk[SqlInterpolated] = input
 
-    def ++(that: String): SqlInterpolatedString = value.escapeHatch ++ Chunk.singleton(Plain(that))
+    def ++(that: String): SqlInterpolatedString = input.escapeHatch ++ Chunk.singleton(Plain(that))
 
-    def ++(that: SqlInterpolatedString): SqlInterpolatedString = value.escapeHatch ++ that.escapeHatch
+    def ++(that: SqlInterpolatedString): SqlInterpolatedString = input.escapeHatch ++ that.escapeHatch
 
-    def render: (String, Chunk[ValueInSql]) =
+    def render: (String, SqlValues) =
       var currentIndex  = 1
       val placeholder   = "$"
       val stringBuilder = new scala.collection.mutable.StringBuilder()
       val valueBuilder  = Array.newBuilder[ValueInSql]
-      value.foreach:
+      input.foreach:
         case Plain(value) =>
           stringBuilder.append(value)
 
@@ -41,4 +42,4 @@ object SqlInterpolatedString:
           valueBuilder += sqlValue
           currentIndex += 1
 
-      stringBuilder.toString() -> Chunk.array(valueBuilder.result())
+      stringBuilder.toString() -> SqlValues(Chunk.array(valueBuilder.result()))
